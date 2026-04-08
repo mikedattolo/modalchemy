@@ -1,0 +1,3 @@
+# Test fixtures directory
+# Contains sample JAR-like files for testing the decompile pipeline.
+# These are generated programmatically in tests, not stored as real JARs.

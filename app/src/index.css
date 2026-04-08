@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+/* Custom scrollbar for the workspace tree */
+.workspace-tree::-webkit-scrollbar {
+  width: 6px;
+}
+.workspace-tree::-webkit-scrollbar-track {
+  background: transparent;
+}
+.workspace-tree::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 3px;
+}
