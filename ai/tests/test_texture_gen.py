@@ -2,8 +2,8 @@
 
 import torch
 
-from ai.texture_gen.model import TinyUNet
-from ai.texture_gen.scheduler import DDPMScheduler
+from texture_gen.model import TinyUNet
+from texture_gen.scheduler import DDPMScheduler
 
 
 def test_tiny_unet_forward_16():

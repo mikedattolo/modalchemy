@@ -11,7 +11,7 @@ import json
 import uuid
 from typing import Literal
 
-from ai.model_gen.schema import BlockModel, ItemModel, Element, FaceUV
+from model_gen.schema import BlockModel, ItemModel, Element, FaceUV
 
 
 def generate_model(

@@ -26,10 +26,10 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
-from ai.texture_gen.config import TOY_CONFIG, FULL_CONFIG, TextureGenConfig
-from ai.texture_gen.model import TinyUNet
-from ai.texture_gen.scheduler import DDPMScheduler
-from ai.training.texture_dataset import TextureDataset
+from texture_gen.config import TOY_CONFIG, FULL_CONFIG, TextureGenConfig
+from texture_gen.model import TinyUNet
+from texture_gen.scheduler import DDPMScheduler
+from training.texture_dataset import TextureDataset
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)

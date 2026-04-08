@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 from pydantic import BaseModel
 
-from ai.model_gen.generator import generate_model
+from model_gen.generator import generate_model
 
 app = FastAPI(
     title="ModForge AI Inference",

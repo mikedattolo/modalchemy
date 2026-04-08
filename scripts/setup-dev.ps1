@@ -12,10 +12,25 @@ function Test-Command($cmd) {
 }
 
 $missing = @()
-if (-not (Test-Command "node"))   { $missing += "Node.js (https://nodejs.org)" }
+if (-not (Test-Command "node"))   { $missing += "Node.js 20 LTS (https://nodejs.org)" }
 if (-not (Test-Command "python")) { $missing += "Python 3.11+ (https://python.org)" }
 if (-not (Test-Command "java"))   { $missing += "Java 8+ (https://adoptium.net)" }
 if (-not (Test-Command "cargo"))  { $missing += "Rust (https://rustup.rs)" }
+
+# Check for Visual Studio Build Tools (required for Tauri / Rust on Windows)
+$vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+$hasBuildTools = $false
+if (Test-Path $vsWhere) {
+    $vsInstalls = & $vsWhere -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null
+    if ($vsInstalls) { $hasBuildTools = $true }
+}
+if (-not $hasBuildTools) {
+    # Fallback: check if cl.exe or link.exe are on PATH
+    if (Test-Command "cl") { $hasBuildTools = $true }
+}
+if (-not $hasBuildTools) {
+    $missing += "Visual Studio Build Tools with C++ workload (https://visualstudio.microsoft.com/visual-cpp-build-tools/)"
+}
 
 if ($missing.Count -gt 0) {
     Write-Host "`nMissing prerequisites:" -ForegroundColor Yellow

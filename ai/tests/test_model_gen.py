@@ -1,6 +1,6 @@
 """AI module tests."""
 
-from ai.model_gen.generator import generate_model
+from model_gen.generator import generate_model
 
 
 def test_generate_block_model():
