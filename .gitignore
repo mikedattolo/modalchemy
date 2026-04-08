@@ -1,0 +1,69 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+*.whl
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# === Node / Frontend ===
+node_modules/
+app/dist/
+app/.vite/
+*.tsbuildinfo
+
+# === Tauri ===
+app/src-tauri/target/
+
+# === AI / Models ===
+ai/checkpoints/
+ai/outputs/
+ai/datasets/raw/
+ai/datasets/processed/
+*.pt
+*.pth
+*.onnx
+*.safetensors
+!ai/checkpoints/.gitkeep
+!ai/outputs/.gitkeep
+
+# === Workspaces (user data) ===
+workspaces/
+
+# === IDE ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# === OS ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Logs ===
+*.log
+logs/
+
+# === Environment ===
+.env
+.env.local
+.env.*.local
+
+# === Tools ===
+tools/cfr/
+tools/fernflower/
+tools/procyon/
+!tools/.gitkeep
