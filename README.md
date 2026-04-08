@@ -93,22 +93,41 @@
 
 ### Quick Start (Windows)
 
+```
+1. Clone or download the repo
+2. Double-click  setup.bat        ← installs all dependencies
+3. Double-click  start.bat        ← launches backend, AI server, and app
+```
+
+That's it. `setup.bat` handles execution-policy restrictions automatically
+and `start.bat` opens each service in its own window.
+
+<details>
+<summary>Manual setup (PowerShell)</summary>
+
 ```powershell
-# 1 — Clone
 git clone https://github.com/mikedattolo/modalchemy.git
 cd modalchemy
 
-# 2 — Run the setup script (installs deps, downloads CFR)
+# Bypass execution policy for this session
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
+# Install dependencies
 .\scripts\setup-dev.ps1
 
-# 3 — Start the backend
+# Terminal 1 — backend
 cd backend
 python -m uvicorn modforge.main:app --reload --port 8420
 
-# 4 — In another terminal, start the desktop app
+# Terminal 2 — AI server (optional)
+cd ai
+python -m inference.server --port 8421
+
+# Terminal 3 — desktop app
 cd app
 npm run tauri dev
 ```
+</details>
 
 ### Quick Start (Linux / macOS)
 
