@@ -171,20 +171,34 @@ cd ai && pytest
 
 ## Documentation
 
-- [Architecture Overview](docs/architecture.md)
-- [Decompilation Pipeline](docs/decompilation.md)
-- [AI Training Guide](docs/ai-training.md)
-- [Hardware Requirements](docs/hardware-requirements.md)
+### Guides
+- [Development Guide](docs/development.md) — running all services, IDE setup, hot-reload
+- [Architecture Overview](docs/architecture.md) — system design and data flow
+- [Decompilation Pipeline](docs/decompilation.md) — how JAR processing works
+- [AI Training Guide](docs/ai-training.md) — preparing data and training models
+
+### Reference
+- [API Reference](docs/api-reference.md) — all REST endpoints with examples
+- [Configuration Reference](docs/configuration.md) — environment variables and settings
+- [Hardware Requirements](docs/hardware-requirements.md) — minimum and recommended specs
+
+### Extending
+- [Decompiler Plugins](docs/decompiler-plugins.md) — adding new Java decompiler backends
+- [Testing Guide](docs/testing.md) — running tests, writing new tests
+
+### Other
+- [Troubleshooting & FAQ](docs/troubleshooting.md) — common issues and solutions
+- [Changelog](CHANGELOG.md) — release history
+- [Contributing](CONTRIBUTING.md) — how to contribute
+- [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Security & Legal](SECURITY.md)
 
 ---
 
 ## Contributing
 
-1. Fork & create a feature branch
-2. Make changes with tests
-3. Ensure CI passes: `npm run lint`, `pytest`, `cargo clippy`
-4. Open a PR against `main`
+See [CONTRIBUTING.md](CONTRIBUTING.md) for full details — branch naming, commit conventions,
+code style, and the PR process.
 
 ---
 
