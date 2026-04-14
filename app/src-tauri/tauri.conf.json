@@ -24,12 +24,5 @@
       "csp": null
     }
   },
-  "plugins": {
-    "fs": {
-      "scope": ["**"]
-    },
-    "shell": {
-      "open": true
-    }
-  }
+  "plugins": {}
 }
