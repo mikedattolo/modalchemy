@@ -9,7 +9,7 @@ include = ["ai*", "inference*", "training*", "datasets*", "texture_gen*", "model
 name = "modforge-ai"
 version = "0.1.0"
 description = "ModForge AI — texture and model generation for Minecraft mods"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "torch>=2.3.0",
     "torchvision>=0.18.0",
@@ -31,7 +31,7 @@ dev = [
 ]
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py310"
 line-length = 99
 
 [tool.ruff.lint]

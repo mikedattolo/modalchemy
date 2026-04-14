@@ -36,7 +36,7 @@ if %ERRORLEVEL% NEQ 0 (
     echo   - Install Visual Studio Build Tools with "Desktop development with C++"
     echo     https://visualstudio.microsoft.com/visual-cpp-build-tools/
     echo   - Install Node.js 20 LTS from https://nodejs.org
-    echo   - Install Python 3.11+ from https://python.org
+    echo   - Install Python 3.10+ from https://python.org
     echo   - Install Rust from https://rustup.rs
     echo   - Install Java 8+ from https://adoptium.net
     echo.

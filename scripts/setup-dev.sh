@@ -12,7 +12,7 @@ echo "=== ModForge Development Setup ==="
 # ── Check prerequisites ──────────────────────────────────────
 missing=()
 command -v node    >/dev/null 2>&1 || missing+=("Node.js (https://nodejs.org)")
-command -v python3 >/dev/null 2>&1 || missing+=("Python 3.11+ (https://python.org)")
+command -v python3 >/dev/null 2>&1 || missing+=("Python 3.10+ (https://python.org)")
 command -v java    >/dev/null 2>&1 || missing+=("Java 8+ (https://adoptium.net)")
 command -v cargo   >/dev/null 2>&1 || missing+=("Rust (https://rustup.rs)")
 

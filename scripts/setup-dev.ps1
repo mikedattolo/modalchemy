@@ -13,7 +13,7 @@ function Test-Command($cmd) {
 
 $missing = @()
 if (-not (Test-Command "node"))   { $missing += "Node.js 20 LTS (https://nodejs.org)" }
-if (-not (Test-Command "python")) { $missing += "Python 3.11+ (https://python.org)" }
+if (-not (Test-Command "python")) { $missing += "Python 3.10+ (https://python.org)" }
 if (-not (Test-Command "java"))   { $missing += "Java 8+ (https://adoptium.net)" }
 if (-not (Test-Command "cargo"))  { $missing += "Rust (https://rustup.rs)" }
 
