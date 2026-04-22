@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import math
 from pathlib import Path
 
 import torch
@@ -35,10 +36,29 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 
-def train(config: TextureGenConfig) -> None:
+def train(
+    config: TextureGenConfig,
+    *,
+    max_vram_gb: float | None = None,
+    auto_gpu: bool = True,
+) -> None:
     """Run the texture model training loop."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    gpu_info = _detect_gpu()
     logger.info("Training on %s", device)
+    if gpu_info:
+        logger.info(
+            "Detected GPU: %s (%.2f GB VRAM)",
+            gpu_info["name"],
+            gpu_info["total_vram_gb"],
+        )
+
+    if device.type == "cuda" and max_vram_gb is not None:
+        _set_vram_limit(max_vram_gb, float(gpu_info["total_vram_gb"]) if gpu_info else None)
+
+    if auto_gpu:
+        _auto_tune_for_gpu(config, gpu_info, max_vram_gb)
+
     logger.info("Config: %s", config)
 
     # Dataset
@@ -131,6 +151,17 @@ def main():
     )
     parser.add_argument("--dataset", type=str, help="Override dataset directory")
     parser.add_argument("--epochs", type=int, help="Override number of epochs")
+    parser.add_argument(
+        "--max-vram-gb",
+        type=float,
+        default=None,
+        help="Optional per-process VRAM cap in GB for CUDA training",
+    )
+    parser.add_argument(
+        "--no-auto-gpu",
+        action="store_true",
+        help="Disable automatic GPU-aware batch-size tuning",
+    )
     args = parser.parse_args()
 
     config = TOY_CONFIG if args.config == "toy" else FULL_CONFIG
@@ -139,7 +170,61 @@ def main():
     if args.epochs:
         config.num_epochs = args.epochs
 
-    train(config)
+    train(config, max_vram_gb=args.max_vram_gb, auto_gpu=not args.no_auto_gpu)
+
+
+def _detect_gpu() -> dict[str, object] | None:
+    if not torch.cuda.is_available():
+        return None
+    props = torch.cuda.get_device_properties(0)
+    return {
+        "name": props.name,
+        "total_vram_gb": props.total_memory / (1024**3),
+    }
+
+
+def _set_vram_limit(limit_gb: float, total_gb: float | None) -> None:
+    if total_gb is None or total_gb <= 0:
+        return
+    fraction = max(0.05, min(0.98, limit_gb / total_gb))
+    torch.cuda.set_per_process_memory_fraction(fraction, device=0)
+    logger.info(
+        "Set CUDA per-process memory fraction to %.2f (limit %.2f GB / total %.2f GB)",
+        fraction,
+        limit_gb,
+        total_gb,
+    )
+
+
+def _auto_tune_for_gpu(
+    config: TextureGenConfig,
+    gpu_info: dict[str, object] | None,
+    max_vram_gb: float | None,
+) -> None:
+    if gpu_info is None:
+        return
+
+    total_gb = float(gpu_info["total_vram_gb"])
+    budget_gb = min(total_gb, max_vram_gb) if max_vram_gb is not None else total_gb
+
+    # Heuristic for memory per sample in this TinyUNet diffusion setup.
+    # Keeps training stable on mid-tier GPUs like RTX 3060 12GB.
+    if config.img_size <= 16:
+        per_sample_gb = 0.16 if config.base_dim >= 64 else 0.10
+    else:
+        per_sample_gb = 0.42 if config.base_dim >= 64 else 0.24
+
+    usable_gb = max(1.0, budget_gb * 0.72)
+    suggested = max(1, math.floor(usable_gb / per_sample_gb))
+
+    if suggested < config.batch_size:
+        logger.info(
+            "Auto-tuned batch_size: %d -> %d based on %.2f GB VRAM budget",
+            config.batch_size,
+            suggested,
+            budget_gb,
+        )
+        config.batch_size = suggested
 
 
 if __name__ == "__main__":

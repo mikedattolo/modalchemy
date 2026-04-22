@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from modforge.config import settings
+from modforge.config import resolve_project_path, settings
 
 router = APIRouter(tags=["settings"])
 
@@ -53,9 +53,7 @@ async def update_settings(body: SettingsUpdate):
     if body.auto_decompile is not None:
         settings.auto_decompile = body.auto_decompile
     if body.workspace_dir is not None:
-        from pathlib import Path
-
-        settings.workspace_dir = Path(body.workspace_dir)
+        settings.workspace_dir = resolve_project_path(body.workspace_dir)
     if body.ai_port is not None:
         settings.ai_port = body.ai_port
 

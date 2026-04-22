@@ -97,6 +97,7 @@
 1. Clone or download the repo
 2. Double-click  setup.bat        ← installs all dependencies
 3. Double-click  start.bat        ← launches backend, AI server, and app
+4. (Optional)    update.bat       ← pulls latest changes + refreshes deps/tools
 ```
 
 That's it. `setup.bat` handles execution-policy restrictions automatically
@@ -153,6 +154,16 @@ python -m inference.server --port 8421
 ```
 
 See [docs/ai-training.md](docs/ai-training.md) for training your own models.
+
+### Updating Existing Installs
+
+If you've already set up ModForge and want to refresh dependencies/tools:
+
+```powershell
+.\update.bat
+```
+
+This updates npm/python dependencies and ensures required external tools are present.
 
 ---
 

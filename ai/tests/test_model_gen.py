@@ -1,5 +1,7 @@
 """AI module tests."""
 
+import json
+
 from model_gen.generator import generate_model
 
 
@@ -24,3 +26,21 @@ def test_generate_item_model():
 def test_generate_default_item():
     result = generate_model("ruby gem", model_type="item")
     assert "generated" in result["model_json"]
+
+
+def test_generate_from_custom_model_corpus(tmp_path, monkeypatch):
+    dataset = tmp_path / "models.jsonl"
+    custom_completion = {
+        "parent": "block/cube_all",
+        "textures": {"all": "modid:blocks/custom_ore"},
+    }
+    row = {
+        "prompt": "Generate a Minecraft block model for: custom ore",
+        "model_type": "block",
+        "completion": custom_completion,
+    }
+    dataset.write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+    monkeypatch.setenv("MODFORGE_MODEL_DATASET", str(dataset))
+    result = generate_model("custom ore block", model_type="block")
+    assert "custom_ore" in result["model_json"]

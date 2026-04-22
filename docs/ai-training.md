@@ -69,6 +69,11 @@ python -m training.train_texture \
   --config full \
   --dataset /custom/path \
   --epochs 200
+
+# Auto-detect GPU and cap training process VRAM (good for 12 GB cards)
+python -m training.train_texture \
+  --config full \
+  --max-vram-gb 10
 ```
 
 Checkpoints are saved to `ai/checkpoints/texture_gen/`.
@@ -144,6 +149,72 @@ The server provides:
 Place your checkpoint in `ai/checkpoints/texture_gen/` and the inference
 server will load it automatically. Without a checkpoint, it falls back to
 placeholder generation.
+
+## Train Directly From Decompiled Workspaces
+
+If you have already imported/decompiled many mods with ModForge, you can train
+from that data directly.
+
+This workflow scans `workspaces/*/resources/assets/**` for:
+- Texture PNG files in `textures/**`
+- Model JSON files in `models/**`
+
+Then it builds:
+- `ai/datasets/processed/textures_from_workspaces/`
+- `ai/datasets/processed/models_from_workspaces/models.jsonl`
+- `ai/checkpoints/model_gen/models.jsonl` (custom model-generation corpus)
+
+### 1) Build datasets from workspaces
+
+```bash
+cd ai
+python -m training.train_from_workspaces --size 16
+```
+
+### 2) Train a custom texture model (optional)
+
+```bash
+cd ai
+python -m training.train_from_workspaces \
+  --size 16 \
+  --train-texture \
+  --config full \
+  --epochs 40 \
+  --max-vram-gb 10
+```
+
+Notes:
+- Training auto-detects your GPU model and VRAM when CUDA is available.
+- `--max-vram-gb` sets a per-process CUDA memory cap to reduce OOM risk.
+- Use `--no-auto-gpu` to disable automatic batch-size tuning.
+
+### 3) Run inference with custom assets
+
+```bash
+cd ai
+python -m inference.server --port 8421
+```
+
+Behavior:
+- Texture generation: loads the newest checkpoint from
+  `ai/checkpoints/texture_gen/*.pt` (or `MODFORGE_TEXTURE_CHECKPOINT`)
+- Model generation: uses custom corpus at
+  `ai/checkpoints/model_gen/models.jsonl` (or `MODFORGE_MODEL_DATASET`)
+
+### 4) Override custom paths (optional)
+
+```bash
+MODFORGE_TEXTURE_CHECKPOINT=/abs/path/to/texture_gen_epoch40.pt \
+MODFORGE_MODEL_DATASET=/abs/path/to/models.jsonl \
+python -m inference.server --port 8421
+```
+
+## Practical Notes for 100+ Mods
+
+- Yes, training from 100+ Forge 1.7.10 mods is feasible.
+- Quality improves as data quality and variety improve (duplicates hurt).
+- CPU training works for toy runs; real quality generally needs CUDA GPU.
+- Keep legal constraints in mind for redistribution of trained weights.
 
 ---
 

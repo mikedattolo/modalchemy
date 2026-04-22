@@ -8,10 +8,16 @@ Uses either:
 from __future__ import annotations
 
 import json
+import os
+import re
 import uuid
 from typing import Literal
+from pathlib import Path
 
 from model_gen.schema import BlockModel, ItemModel, Element, FaceUV
+
+
+_CUSTOM_CORPUS_CACHE: tuple[Path | None, list[dict]] = (None, [])
 
 
 def generate_model(
@@ -19,6 +25,7 @@ def generate_model(
     model_type: Literal["block", "item"] = "block",
     mode: Literal["generate", "remix"] = "generate",
     source_json: str | None = None,
+    texture_name: str | None = None,
 ) -> dict:
     """Generate a Minecraft model JSON.
 
@@ -28,10 +35,15 @@ def generate_model(
     Returns:
         Dict with id, prompt, model_json (pretty-printed), model_type.
     """
-    if model_type == "block":
-        model_json = _generate_block(prompt)
-    else:
-        model_json = _generate_item(prompt)
+    model_json = _generate_from_custom_corpus(prompt, model_type)
+    if model_json is None:
+        if model_type == "block":
+            model_json = _generate_block(prompt)
+        else:
+            model_json = _generate_item(prompt)
+
+    if texture_name:
+        model_json = _bind_texture(model_json, model_type, texture_name)
 
     return {
         "id": uuid.uuid4().hex[:12],
@@ -39,6 +51,112 @@ def generate_model(
         "model_json": json.dumps(model_json, indent=2),
         "model_type": model_type,
     }
+
+
+def _bind_texture(model_json: dict, model_type: str, texture_name: str) -> dict:
+    """Force generated model textures to point at the same resource name."""
+    clean_name = _slug(texture_name)
+    if model_type == "item":
+        resource = f"modid:items/{clean_name}"
+    else:
+        resource = f"modid:blocks/{clean_name}"
+
+    updated = dict(model_json)
+    textures = updated.get("textures")
+    if isinstance(textures, dict) and textures:
+        updated["textures"] = {str(k): resource for k in textures.keys()}
+    else:
+        key = "layer0" if model_type == "item" else "all"
+        updated["textures"] = {key: resource}
+    return updated
+
+
+def _generate_from_custom_corpus(prompt: str, model_type: str) -> dict | None:
+    """Retrieve the closest model JSON from a custom training corpus."""
+    entries = _load_custom_corpus()
+    if not entries:
+        return None
+
+    query_tokens = _tokens(prompt)
+    best: dict | None = None
+    best_score = 0.0
+
+    for entry in entries:
+        entry_type = str(entry.get("model_type", "block"))
+        if entry_type != model_type:
+            continue
+        prompt_tokens = set(entry.get("tokens", []))
+        if not prompt_tokens:
+            continue
+        score = len(query_tokens & prompt_tokens) / max(len(query_tokens | prompt_tokens), 1)
+        if score > best_score:
+            best_score = score
+            best = entry
+
+    if best is None or best_score <= 0:
+        return None
+
+    completion = best.get("completion")
+    return completion if isinstance(completion, dict) else None
+
+
+def _load_custom_corpus() -> list[dict]:
+    global _CUSTOM_CORPUS_CACHE
+
+    corpus_path = _resolve_corpus_path()
+    cached_path, cached_entries = _CUSTOM_CORPUS_CACHE
+    if corpus_path is None:
+        _CUSTOM_CORPUS_CACHE = (None, [])
+        return []
+    if cached_path == corpus_path:
+        return cached_entries
+
+    entries: list[dict] = []
+    with open(corpus_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            completion = row.get("completion")
+            if isinstance(completion, str):
+                try:
+                    completion = json.loads(completion)
+                except json.JSONDecodeError:
+                    continue
+
+            if not isinstance(completion, dict):
+                continue
+
+            entries.append(
+                {
+                    "prompt": row.get("prompt", ""),
+                    "model_type": row.get("model_type", "block"),
+                    "completion": completion,
+                    "tokens": sorted(_tokens(str(row.get("prompt", "")))),
+                }
+            )
+
+    _CUSTOM_CORPUS_CACHE = (corpus_path, entries)
+    return entries
+
+
+def _resolve_corpus_path() -> Path | None:
+    env_path = os.getenv("MODFORGE_MODEL_DATASET")
+    if env_path:
+        path = Path(env_path).expanduser().resolve()
+        return path if path.exists() else None
+
+    default = Path(__file__).resolve().parents[1] / "checkpoints" / "model_gen" / "models.jsonl"
+    return default if default.exists() else None
+
+
+def _tokens(text: str) -> set[str]:
+    return {t for t in re.split(r"[^a-z0-9]+", text.lower()) if len(t) >= 2}
 
 
 def _generate_block(prompt: str) -> dict:
