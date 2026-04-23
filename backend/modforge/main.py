@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from modforge.api.decompile import router as decompile_router
+from modforge.api.library import router as library_router
 from modforge.api.workspace import router as workspace_router
 from modforge.api.settings import router as settings_router
 
@@ -23,6 +24,7 @@ app.add_middleware(
 app.include_router(decompile_router, prefix="/api")
 app.include_router(workspace_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
+app.include_router(library_router, prefix="/api")
 
 
 @app.get("/health")

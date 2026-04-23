@@ -49,6 +49,13 @@ interface GpuTelemetry {
   allocated_vram_gb: number | null;
   reserved_vram_gb: number | null;
   recommended_max_vram_gb: number | null;
+  torch_installed: boolean;
+  torch_version: string | null;
+  torch_cuda_version: string | null;
+  cuda_device_count: number;
+  nvidia_smi_ok: boolean;
+  nvidia_smi_summary: string | null;
+  diagnostic: string;
 }
 
 interface TrainingStatus {
@@ -370,13 +377,23 @@ export function AIStudioPage() {
                 Reading hardware...
               </div>
             ) : !gpu?.gpu_available ? (
-              <p className="text-sm text-slate-400">CUDA GPU not detected. Training will run on CPU.</p>
+              <div className="space-y-1 text-sm text-slate-400">
+                <p>CUDA GPU not detected. Training will run on CPU.</p>
+                <p>Diagnostic: {gpu?.diagnostic ?? "Unknown"}</p>
+                <p>Torch: {gpu?.torch_version ?? "not installed"}</p>
+                <p>Torch CUDA: {gpu?.torch_cuda_version ?? "none"}</p>
+                <p>CUDA device count: {gpu?.cuda_device_count ?? 0}</p>
+                <p>nvidia-smi: {gpu?.nvidia_smi_summary ?? "not available"}</p>
+              </div>
             ) : (
               <div className="space-y-1 text-sm text-slate-300">
                 <p className="flex items-center gap-2 text-slate-100">
                   <Cpu className="h-4 w-4 text-forge-300" />
                   {gpu.name}
                 </p>
+                <p>Torch: {gpu.torch_version ?? "?"} (CUDA {gpu.torch_cuda_version ?? "?"})</p>
+                <p>CUDA devices: {gpu.cuda_device_count}</p>
+                <p>nvidia-smi: {gpu.nvidia_smi_summary ?? "n/a"}</p>
                 <p>Total VRAM: {gpu.total_vram_gb ?? "?"} GB</p>
                 <p>Free VRAM: {gpu.free_vram_gb ?? "?"} GB</p>
                 <p>Allocated: {gpu.allocated_vram_gb ?? "?"} GB</p>
@@ -629,6 +646,11 @@ export function AIStudioPage() {
           ) : (
             <div className="mt-4 space-y-4">
               <div className="rounded-xl border border-slate-700 bg-slate-950 p-3">
+                <div className="mb-2 text-xs text-slate-400">Live 3D Preview</div>
+                <ModelPreview3D textureSrc={texturePreviewSrc} />
+              </div>
+
+              <div className="rounded-xl border border-slate-700 bg-slate-950 p-3">
                 <div className="mb-2 text-xs text-slate-400">Texture ({bundle.texture.texture_name})</div>
                 <img
                   src={texturePreviewSrc}
@@ -673,4 +695,29 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 function basename(path: string): string {
   const split = path.split("/");
   return split[split.length - 1] || path;
+}
+
+function ModelPreview3D({ textureSrc }: { textureSrc: string }) {
+  const faceStyle = textureSrc
+    ? {
+        backgroundImage: `url(${textureSrc})`,
+        backgroundSize: "cover",
+        imageRendering: "pixelated" as const,
+      }
+    : { background: "#334155" };
+
+  return (
+    <div className="flex h-56 items-center justify-center rounded-lg border border-slate-800 bg-[radial-gradient(circle_at_center,_#0f172a,_#020617)]">
+      <div className="relative h-24 w-24 [perspective:900px]">
+        <div className="model-cube absolute inset-0">
+          <div className="model-face" style={{ ...faceStyle, transform: "translateZ(48px)" }} />
+          <div className="model-face" style={{ ...faceStyle, transform: "rotateY(180deg) translateZ(48px)" }} />
+          <div className="model-face" style={{ ...faceStyle, transform: "rotateY(90deg) translateZ(48px)" }} />
+          <div className="model-face" style={{ ...faceStyle, transform: "rotateY(-90deg) translateZ(48px)" }} />
+          <div className="model-face" style={{ ...faceStyle, transform: "rotateX(90deg) translateZ(48px)" }} />
+          <div className="model-face" style={{ ...faceStyle, transform: "rotateX(-90deg) translateZ(48px)" }} />
+        </div>
+      </div>
+    </div>
+  );
 }

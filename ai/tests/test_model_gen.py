@@ -28,6 +28,16 @@ def test_generate_default_item():
     assert "generated" in result["model_json"]
 
 
+def test_generate_giraffe_block_has_elements():
+    result = generate_model("giraffe statue block", model_type="block")
+    assert "elements" in result["model_json"]
+
+
+def test_generate_gun_block_has_elements():
+    result = generate_model("steampunk gun block", model_type="block")
+    assert "elements" in result["model_json"]
+
+
 def test_generate_from_custom_model_corpus(tmp_path, monkeypatch):
     dataset = tmp_path / "models.jsonl"
     custom_completion = {

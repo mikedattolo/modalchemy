@@ -573,9 +573,27 @@ def _get_gpu_telemetry() -> dict[str, object]:
             "allocated_vram_gb": None,
             "reserved_vram_gb": None,
             "recommended_max_vram_gb": None,
+            "torch_installed": False,
+            "torch_version": None,
+            "torch_cuda_version": None,
+            "cuda_device_count": 0,
+            "nvidia_smi_ok": False,
+            "nvidia_smi_summary": None,
+            "diagnostic": "PyTorch is not installed in the AI environment.",
         }
 
+    torch_version = getattr(torch, "__version__", None)
+    torch_cuda_version = getattr(torch.version, "cuda", None)
+    device_count = torch.cuda.device_count() if hasattr(torch.cuda, "device_count") else 0
+    smi_ok, smi_summary = _nvidia_smi_summary()
+
     if not torch.cuda.is_available():
+        if torch_cuda_version is None:
+            reason = "PyTorch is CPU-only build (torch.version.cuda is None). Install CUDA-enabled PyTorch."
+        elif not smi_ok:
+            reason = "CUDA build is present but nvidia-smi did not report a working GPU/driver."
+        else:
+            reason = "CUDA runtime is present but torch.cuda.is_available() is False."
         return {
             "gpu_available": False,
             "name": None,
@@ -584,6 +602,13 @@ def _get_gpu_telemetry() -> dict[str, object]:
             "allocated_vram_gb": None,
             "reserved_vram_gb": None,
             "recommended_max_vram_gb": None,
+            "torch_installed": True,
+            "torch_version": torch_version,
+            "torch_cuda_version": torch_cuda_version,
+            "cuda_device_count": int(device_count),
+            "nvidia_smi_ok": smi_ok,
+            "nvidia_smi_summary": smi_summary,
+            "diagnostic": reason,
         }
 
     props = torch.cuda.get_device_properties(0)
@@ -606,7 +631,43 @@ def _get_gpu_telemetry() -> dict[str, object]:
         "allocated_vram_gb": round(allocated_gb, 2),
         "reserved_vram_gb": round(reserved_gb, 2),
         "recommended_max_vram_gb": recommended,
+        "torch_installed": True,
+        "torch_version": torch_version,
+        "torch_cuda_version": torch_cuda_version,
+        "cuda_device_count": int(device_count),
+        "nvidia_smi_ok": smi_ok,
+        "nvidia_smi_summary": smi_summary,
+        "diagnostic": "CUDA GPU detected and ready.",
     }
+
+
+def _nvidia_smi_summary() -> tuple[bool, str | None]:
+    try:
+        result = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=name,driver_version,memory.total,memory.free",
+                "--format=csv,noheader",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except FileNotFoundError:
+        return False, "nvidia-smi not found on PATH"
+    except Exception as exc:
+        return False, f"nvidia-smi error: {exc}"
+
+    if result.returncode != 0:
+        msg = (result.stderr or result.stdout).strip()
+        return False, msg or "nvidia-smi returned non-zero status"
+
+    line = result.stdout.strip().splitlines()
+    if not line:
+        return False, "nvidia-smi returned no GPU rows"
+
+    return True, line[0].strip()
 
 
 def _ai_root() -> Path:

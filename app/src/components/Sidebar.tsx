@@ -4,6 +4,7 @@ import {
   FolderTree,
   Image,
   Box,
+  Library,
   Sparkles,
   Settings,
   Hammer,
@@ -14,6 +15,7 @@ const links = [
   { to: "/workspace", label: "Workspace", icon: FolderTree },
   { to: "/textures", label: "Textures", icon: Image },
   { to: "/models", label: "Models", icon: Box },
+  { to: "/library", label: "Library", icon: Library },
   { to: "/ai-studio", label: "AI Studio", icon: Sparkles },
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;

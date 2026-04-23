@@ -164,6 +164,12 @@ def _generate_block(prompt: str) -> dict:
     # Simple heuristic: produce a cube_all or cube_column based on prompt
     prompt_lower = prompt.lower()
 
+    if any(kw in prompt_lower for kw in ["giraffe", "animal", "creature", "statue"]):
+        return _generate_animal_statue_model()
+
+    if any(kw in prompt_lower for kw in ["gun", "pistol", "rifle", "blaster", "cannon"]):
+        return _generate_gun_model()
+
     if any(kw in prompt_lower for kw in ["log", "column", "pillar", "barrel"]):
         return BlockModel(
             parent="block/cube_column",
@@ -219,3 +225,51 @@ def _generate_item(prompt: str) -> dict:
 def _slug(text: str) -> str:
     """Convert prompt text to a Minecraft-style resource name."""
     return "_".join(text.lower().split()[:4]).replace("-", "_")[:32]
+
+
+def _generate_animal_statue_model() -> dict:
+    """Build a simple multi-element animal-like statue block model."""
+    elements = [
+        _box([6, 0, 6], [10, 8, 10]),  # torso
+        _box([6, 8, 5], [10, 14, 9]),  # neck
+        _box([5, 14, 4], [11, 16, 10]),  # head
+        _box([6.5, 0, 4], [7.5, 8, 5]),  # leg 1
+        _box([8.5, 0, 4], [9.5, 8, 5]),  # leg 2
+        _box([6.5, 0, 11], [7.5, 8, 12]),  # leg 3
+        _box([8.5, 0, 11], [9.5, 8, 12]),  # leg 4
+    ]
+    return {
+        "textures": {"all": "modid:blocks/custom_model"},
+        "elements": elements,
+    }
+
+
+def _generate_gun_model() -> dict:
+    """Build a simple multi-element gun-like block model."""
+    elements = [
+        _box([3, 8, 6], [14, 11, 10]),  # receiver
+        _box([2, 9, 7], [3, 10, 9]),  # stock end
+        _box([14, 9, 7], [16, 10, 9]),  # barrel
+        _box([7, 4, 7], [10, 8, 9]),  # grip
+        _box([6, 11, 7], [11, 13, 9]),  # top rail/sight
+    ]
+    return {
+        "textures": {"all": "modid:blocks/custom_model"},
+        "elements": elements,
+    }
+
+
+def _box(from_xyz: list[float], to_xyz: list[float]) -> dict:
+    uv = [0.0, 0.0, 16.0, 16.0]
+    faces = {
+        "down": FaceUV(uv=uv, texture="#all"),
+        "up": FaceUV(uv=uv, texture="#all"),
+        "north": FaceUV(uv=uv, texture="#all"),
+        "south": FaceUV(uv=uv, texture="#all"),
+        "west": FaceUV(uv=uv, texture="#all"),
+        "east": FaceUV(uv=uv, texture="#all"),
+    }
+    return Element(from_=from_xyz, to=to_xyz, faces=faces).model_dump(
+        by_alias=True,
+        exclude_none=True,
+    )

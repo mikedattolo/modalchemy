@@ -6,6 +6,7 @@ import { TextureGenPage } from "./pages/TextureGenPage";
 import { ModelGenPage } from "./pages/ModelGenPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { AIStudioPage } from "./pages/AIStudioPage";
+import { LibraryPage } from "./pages/LibraryPage";
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
           <Route path="/workspace" element={<WorkspacePage />} />
           <Route path="/textures" element={<TextureGenPage />} />
           <Route path="/models" element={<ModelGenPage />} />
+          <Route path="/library" element={<LibraryPage />} />
           <Route path="/ai-studio" element={<AIStudioPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>

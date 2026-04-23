@@ -46,3 +46,19 @@ async def test_decompile_rejects_non_jar(client):
     )
     assert resp.status_code == 400
     assert "jar" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_library_catalog_rejects_invalid_version(client):
+    resp = await client.get("/api/library/catalog", params={"minecraft_version": "1.12.2"})
+    assert resp.status_code == 400
+    assert "minecraft_version" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_library_import_rejects_invalid_version(client):
+    resp = await client.post(
+        "/api/library/import",
+        json={"project_id": "example", "minecraft_version": "1.12.2"},
+    )
+    assert resp.status_code == 400
