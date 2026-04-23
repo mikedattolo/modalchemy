@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Sparkles,
   SlidersHorizontal,
@@ -73,6 +73,8 @@ interface TrainingStatus {
 type TrainMode = "workspace" | "texture";
 
 export function AIStudioPage() {
+  const hardwareInFlightRef = useRef(false);
+  const statusInFlightRef = useRef(false);
   const [prompt, setPrompt] = useState("");
   const [texturePrompt, setTexturePrompt] = useState("");
   const [size, setSize] = useState<16 | 32>(16);
@@ -113,15 +115,21 @@ export function AIStudioPage() {
 
   useEffect(() => {
     void loadOptions();
-    void loadHardware();
+    void loadHardware(false);
     void loadTrainingStatus();
 
-    const timer = window.setInterval(() => {
+    const statusTimer = window.setInterval(() => {
       void loadTrainingStatus();
-      void loadHardware();
     }, 2500);
 
-    return () => window.clearInterval(timer);
+    const hardwareTimer = window.setInterval(() => {
+      void loadHardware(true);
+    }, 10000);
+
+    return () => {
+      window.clearInterval(statusTimer);
+      window.clearInterval(hardwareTimer);
+    };
   }, []);
 
   useEffect(() => {
@@ -147,8 +155,10 @@ export function AIStudioPage() {
     }
   }
 
-  async function loadHardware() {
-    setLoadingHardware(true);
+  async function loadHardware(silent: boolean) {
+    if (hardwareInFlightRef.current) return;
+    hardwareInFlightRef.current = true;
+    if (!silent) setLoadingHardware(true);
     try {
       const res = await fetch(`${AI_BACKEND}/api/training/hardware`);
       if (!res.ok) throw new Error("Failed to query GPU hardware");
@@ -157,11 +167,14 @@ export function AIStudioPage() {
     } catch {
       setGpu(null);
     } finally {
-      setLoadingHardware(false);
+      if (!silent) setLoadingHardware(false);
+      hardwareInFlightRef.current = false;
     }
   }
 
   async function loadTrainingStatus() {
+    if (statusInFlightRef.current) return;
+    statusInFlightRef.current = true;
     try {
       const res = await fetch(`${AI_BACKEND}/api/training/status`);
       if (!res.ok) throw new Error("Failed to query training status");
@@ -169,6 +182,8 @@ export function AIStudioPage() {
       setTrainingStatus(data);
     } catch {
       setTrainingStatus(null);
+    } finally {
+      statusInFlightRef.current = false;
     }
   }
 
@@ -359,7 +374,7 @@ export function AIStudioPage() {
           </div>
           <button
             onClick={() => {
-              void loadHardware();
+              void loadHardware(false);
               void loadTrainingStatus();
             }}
             className="inline-flex items-center gap-2 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800"
