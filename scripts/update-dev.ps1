@@ -52,6 +52,17 @@ Pop-Location
 Write-Host "[4/5] Updating AI dependencies..." -ForegroundColor Cyan
 Push-Location (Join-Path $Root "ai")
 python -m pip install -e ".[dev]" --quiet
+
+# If NVIDIA GPU is available, replace CPU torch wheel with CUDA-enabled wheel.
+$hasNvidiaSmi = Test-Command "nvidia-smi"
+if ($hasNvidiaSmi) {
+    $torchCudaTag = if ($env:MODFORGE_TORCH_CUDA_TAG) { $env:MODFORGE_TORCH_CUDA_TAG } else { "cu124" }
+    $torchIndexUrl = "https://download.pytorch.org/whl/$torchCudaTag"
+    Write-Host "  NVIDIA GPU detected. Installing CUDA-enabled PyTorch ($torchCudaTag)..." -ForegroundColor Cyan
+    python -m pip install --upgrade --force-reinstall torch torchvision torchaudio --index-url $torchIndexUrl
+} else {
+    Write-Host "  NVIDIA GPU not detected; keeping default CPU PyTorch." -ForegroundColor Yellow
+}
 Pop-Location
 
 Write-Host "[5/5] Ensuring external tools are present..." -ForegroundColor Cyan

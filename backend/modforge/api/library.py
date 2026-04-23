@@ -90,11 +90,13 @@ async def library_import(body: LibraryImportRequest):
         raise HTTPException(status_code=404, detail="Mod file URL missing from catalog response")
 
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".jar")
+    tmp_path = Path(tmp.name)
+    tmp.close()
     try:
-        _download_file(file_url, Path(tmp.name))
+        _download_file(file_url, tmp_path)
 
         pipeline = DecompilePipeline(
-            jar_path=Path(tmp.name),
+            jar_path=tmp_path,
             jar_name=filename,
             workspace_root=settings.workspace_dir,
             decompiler=settings.decompiler,
@@ -110,7 +112,11 @@ async def library_import(body: LibraryImportRequest):
             "report": report.model_dump(),
         }
     finally:
-        Path(tmp.name).unlink(missing_ok=True)
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except PermissionError:
+            # Windows may still hold a transient lock briefly; non-fatal cleanup failure.
+            pass
 
 
 def _validate_mc_version(version: str) -> None:

@@ -1,3 +1,28 @@
+# GPU Not Detected In AI Studio
+
+Symptom in AI Studio:
+- `CUDA GPU not detected`
+- Diagnostic says `PyTorch is CPU-only build (torch.version.cuda is None)`
+
+Cause:
+- The Python environment installed the CPU-only torch wheel.
+
+Fix (Windows PowerShell, from repo root):
+
+```powershell
+cd ai
+python -m pip uninstall -y torch torchvision torchaudio
+python -m pip install --upgrade --force-reinstall torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available())"
+```
+
+Expected output should include:
+- a CUDA version (not `None`)
+- `True` for `torch.cuda.is_available()`
+
+Notes:
+- `setup-dev.ps1` and `update-dev.ps1` now auto-install CUDA torch when `nvidia-smi` is detected.
+- Override CUDA wheel channel with env var `MODFORGE_TORCH_CUDA_TAG` (example: `cu121`, `cu124`).
 # Troubleshooting & FAQ
 
 Common issues and how to fix them.
