@@ -118,11 +118,11 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 # Terminal 1 — backend
 cd backend
-python -m uvicorn modforge.main:app --reload --port 8420
+.\.venv\Scripts\python -m uvicorn modforge.main:app --reload --port 8420
 
 # Terminal 2 — AI server (optional)
 cd ai
-python -m inference.server --port 8421
+.\.venv\Scripts\python -m inference.server --port 8421
 
 # Terminal 3 — desktop app
 cd app

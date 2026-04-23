@@ -36,17 +36,26 @@ if not exist "app\node_modules" (
 )
 
 set "ROOT=%~dp0"
+set "BACKEND_PY=python"
+set "AI_PY=python"
+
+if exist "%ROOT%backend\.venv\Scripts\python.exe" (
+    set "BACKEND_PY=%ROOT%backend\.venv\Scripts\python.exe"
+)
+if exist "%ROOT%ai\.venv\Scripts\python.exe" (
+    set "AI_PY=%ROOT%ai\.venv\Scripts\python.exe"
+)
 
 :: ── Start Backend (port 8420) ───────────────────────────────
 echo [1/3] Starting backend on http://localhost:8420 ...
-start "ModForge Backend" cmd /k "cd /d "%ROOT%backend" && python -m uvicorn modforge.main:app --reload --port 8420"
+start "ModForge Backend" cmd /k "cd /d "%ROOT%backend" && "%BACKEND_PY%" -m uvicorn modforge.main:app --reload --port 8420"
 
 :: Give the backend a moment to bind the port
 timeout /t 3 /noq >nul
 
 :: ── Start AI Server (port 8421) ─────────────────────────────
 echo [2/3] Starting AI server on http://localhost:8421 ...
-start "ModForge AI Server" cmd /k "cd /d "%ROOT%ai" && python -m inference.server --port 8421"
+start "ModForge AI Server" cmd /k "cd /d "%ROOT%ai" && "%AI_PY%" -m inference.server --port 8421"
 
 timeout /t 2 /noq >nul
 

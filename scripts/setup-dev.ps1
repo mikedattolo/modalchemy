@@ -11,6 +11,26 @@ function Test-Command($cmd) {
     return $?
 }
 
+function Ensure-VenvPython($modulePath) {
+    $venvDir = Join-Path $modulePath ".venv"
+    $venvPython = Join-Path $venvDir "Scripts\python.exe"
+
+    if (-not (Test-Path $venvPython)) {
+        Write-Host "  Creating virtual environment in $venvDir" -ForegroundColor Cyan
+        python -m venv $venvDir
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to create virtual environment at $venvDir"
+        }
+    }
+
+    & $venvPython -m pip install --upgrade pip setuptools wheel --quiet
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to bootstrap pip tooling in $venvDir"
+    }
+
+    return $venvPython
+}
+
 $missing = @()
 if (-not (Test-Command "node"))   { $missing += "Node.js 20 LTS (https://nodejs.org)" }
 if (-not (Test-Command "python")) { $missing += "Python 3.10+ (https://python.org)" }
@@ -64,15 +84,27 @@ Write-Host "  Frontend deps installed" -ForegroundColor Green
 
 # ── Install backend dependencies ─────────────────────────────
 Write-Host "[4/5] Installing backend dependencies..." -ForegroundColor Cyan
-Push-Location (Join-Path $PSScriptRoot "..\backend")
-python -m pip install -e ".[dev]" --quiet
+$backendPath = Join-Path $PSScriptRoot "..\backend"
+$backendPython = Ensure-VenvPython $backendPath
+Push-Location $backendPath
+& $backendPython -m pip install -e ".[dev]" --quiet
+if ($LASTEXITCODE -ne 0) {
+    Pop-Location
+    throw "Failed to install backend dependencies (pip exit code $LASTEXITCODE)."
+}
 Pop-Location
 Write-Host "  Backend deps installed" -ForegroundColor Green
 
 # ── Install AI dependencies ──────────────────────────────────
 Write-Host "[5/5] Installing AI dependencies..." -ForegroundColor Cyan
-Push-Location (Join-Path $PSScriptRoot "..\ai")
-python -m pip install -e ".[dev]" --quiet
+$aiPath = Join-Path $PSScriptRoot "..\ai"
+$aiPython = Ensure-VenvPython $aiPath
+Push-Location $aiPath
+& $aiPython -m pip install -e ".[dev]" --quiet
+if ($LASTEXITCODE -ne 0) {
+    Pop-Location
+    throw "Failed to install AI dependencies (pip exit code $LASTEXITCODE)."
+}
 
 # If NVIDIA GPU is available, replace CPU torch wheel with CUDA-enabled wheel.
 $hasNvidiaSmi = Test-Command "nvidia-smi"
@@ -80,7 +112,17 @@ if ($hasNvidiaSmi) {
     $torchCudaTag = if ($env:MODFORGE_TORCH_CUDA_TAG) { $env:MODFORGE_TORCH_CUDA_TAG } else { "cu124" }
     $torchIndexUrl = "https://download.pytorch.org/whl/$torchCudaTag"
     Write-Host "  NVIDIA GPU detected. Installing CUDA-enabled PyTorch ($torchCudaTag)..." -ForegroundColor Cyan
-    python -m pip install --upgrade --force-reinstall torch torchvision torchaudio --index-url $torchIndexUrl
+    & $aiPython -m pip install --upgrade torch torchvision torchaudio --index-url $torchIndexUrl
+    if ($LASTEXITCODE -ne 0) {
+        Pop-Location
+        throw "Failed to install CUDA-enabled PyTorch from $torchIndexUrl (pip exit code $LASTEXITCODE)."
+    }
+
+    & $aiPython -c "import torch; import sys; sys.exit(0 if (torch.version.cuda is not None and torch.cuda.is_available()) else 1)"
+    if ($LASTEXITCODE -ne 0) {
+        Pop-Location
+        throw "CUDA-enabled PyTorch verification failed (torch.cuda.is_available() == False)."
+    }
 } else {
     Write-Host "  NVIDIA GPU not detected; keeping default CPU PyTorch." -ForegroundColor Yellow
 }
@@ -97,11 +139,11 @@ Write-Host @"
 Next steps:
   1. Start the backend:
      cd backend
-     python -m uvicorn modforge.main:app --reload --port 8420
+    .\.venv\Scripts\python -m uvicorn modforge.main:app --reload --port 8420
 
   2. Start the AI inference server (optional):
      cd ai
-     python -m inference.server --port 8421
+      .\.venv\Scripts\python -m inference.server --port 8421
 
   3. Start the desktop app:
      cd app
