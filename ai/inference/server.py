@@ -10,11 +10,15 @@ import argparse
 import base64
 import io
 import os
+import subprocess
+import sys
+import threading
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, UploadFile
+from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 from pydantic import BaseModel
@@ -39,6 +43,18 @@ app.add_middleware(
 _TEXTURE_RUNTIME: dict[str, object] = {"initialized": False, "enabled": False}
 _ACTIVE_TEXTURE_CHECKPOINT: str | None = None
 _ACTIVE_MODEL_DATASET: str | None = None
+_TRAINING_LOCK = threading.Lock()
+_TRAINING_PROCESS: subprocess.Popen[str] | None = None
+_TRAINING_STATE: dict[str, object] = {
+    "running": False,
+    "mode": None,
+    "pid": None,
+    "started_at": None,
+    "ended_at": None,
+    "exit_code": None,
+    "command": None,
+    "log_path": None,
+}
 
 
 # ── Texture endpoints ───────────────────────────────────────────
@@ -118,6 +134,18 @@ class AssetRequest(BaseModel):
 class RuntimeConfigRequest(BaseModel):
     texture_checkpoint: str | None = None
     model_dataset: str | None = None
+
+
+class TrainingRequest(BaseModel):
+    mode: str = "workspace"  # workspace | texture
+    config: str = "full"  # toy | full
+    size: int = 16
+    epochs: int | None = None
+    max_vram_gb: float | None = None
+    auto_gpu: bool = True
+    train_texture: bool = True
+    workspaces_dir: str | None = None
+    dataset_dir: str | None = None
 
 
 @app.post("/api/models/generate")
@@ -201,6 +229,125 @@ async def set_active_config(req: RuntimeConfigRequest):
 
     options = await get_config_options()
     return {"ok": True, "active": options}
+
+
+@app.get("/api/training/hardware")
+async def get_training_hardware():
+    """Report detected GPU and VRAM telemetry for training UI."""
+    return _get_gpu_telemetry()
+
+
+@app.get("/api/training/status")
+async def get_training_status():
+    """Return current training status and latest log lines."""
+    with _TRAINING_LOCK:
+        snapshot = dict(_TRAINING_STATE)
+
+    log_tail = []
+    log_path = snapshot.get("log_path")
+    if isinstance(log_path, str) and Path(log_path).exists():
+        try:
+            lines = Path(log_path).read_text(encoding="utf-8", errors="replace").splitlines()
+            log_tail = lines[-120:]
+        except Exception:
+            log_tail = []
+
+    snapshot["log_tail"] = log_tail
+    return snapshot
+
+
+@app.post("/api/training/start")
+async def start_training(req: TrainingRequest):
+    """Start a background training process for texture/workspace pipelines."""
+    global _TRAINING_PROCESS
+
+    with _TRAINING_LOCK:
+        if bool(_TRAINING_STATE.get("running")):
+            raise HTTPException(status_code=409, detail="Training is already running")
+
+        mode = req.mode.strip().lower()
+        if mode not in {"workspace", "texture"}:
+            raise HTTPException(status_code=400, detail="mode must be 'workspace' or 'texture'")
+
+        if req.config not in {"toy", "full"}:
+            raise HTTPException(status_code=400, detail="config must be 'toy' or 'full'")
+
+        if req.size not in {16, 32}:
+            raise HTTPException(status_code=400, detail="size must be 16 or 32")
+
+        cmd = [sys.executable]
+        if mode == "workspace":
+            cmd.extend(["-m", "training.train_from_workspaces", "--size", str(req.size), "--config", req.config])
+            if req.train_texture:
+                cmd.append("--train-texture")
+            if req.workspaces_dir:
+                cmd.extend(["--workspaces-dir", req.workspaces_dir])
+        else:
+            cmd.extend(["-m", "training.train_texture", "--config", req.config])
+            if req.dataset_dir:
+                cmd.extend(["--dataset", req.dataset_dir])
+
+        if req.epochs is not None and req.epochs > 0:
+            cmd.extend(["--epochs", str(req.epochs)])
+        if req.max_vram_gb is not None and req.max_vram_gb > 0:
+            cmd.extend(["--max-vram-gb", str(req.max_vram_gb)])
+        if not req.auto_gpu:
+            cmd.append("--no-auto-gpu")
+
+        logs_dir = _ai_root() / "outputs" / "training_logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        started = datetime.now(timezone.utc)
+        stamp = started.strftime("%Y%m%d-%H%M%S")
+        log_path = logs_dir / f"training-{stamp}.log"
+
+        log_file = open(log_path, "w", encoding="utf-8")
+        try:
+            process = subprocess.Popen(
+                cmd,
+                cwd=_ai_root(),
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+        except Exception as exc:
+            log_file.close()
+            raise HTTPException(status_code=500, detail=f"Failed to start training: {exc}") from exc
+
+        _TRAINING_PROCESS = process
+        _TRAINING_STATE.update(
+            {
+                "running": True,
+                "mode": mode,
+                "pid": process.pid,
+                "started_at": started.isoformat(),
+                "ended_at": None,
+                "exit_code": None,
+                "command": " ".join(cmd),
+                "log_path": str(log_path),
+            }
+        )
+
+        watcher = threading.Thread(
+            target=_watch_training_process,
+            args=(process, log_file),
+            daemon=True,
+        )
+        watcher.start()
+
+    return {"ok": True, "pid": _TRAINING_STATE.get("pid"), "log_path": _TRAINING_STATE.get("log_path")}
+
+
+@app.post("/api/training/stop")
+async def stop_training():
+    """Stop the active background training process."""
+    global _TRAINING_PROCESS
+    with _TRAINING_LOCK:
+        process = _TRAINING_PROCESS
+        if process is None or not bool(_TRAINING_STATE.get("running")):
+            return {"ok": True, "message": "No training process is running"}
+
+    process.terminate()
+    return {"ok": True, "message": "Stop signal sent"}
 
 
 # ── Health ───────────────────────────────────────────────────────
@@ -394,6 +541,76 @@ def _discover_model_datasets() -> list[Path]:
             seen.add(key)
             unique.append(option)
     return unique
+
+
+def _watch_training_process(process: subprocess.Popen[str], log_file) -> None:
+    """Wait for training process completion and update state."""
+    global _TRAINING_PROCESS
+    try:
+        exit_code = process.wait()
+    finally:
+        try:
+            log_file.close()
+        except Exception:
+            pass
+
+    with _TRAINING_LOCK:
+        _TRAINING_STATE["running"] = False
+        _TRAINING_STATE["exit_code"] = exit_code
+        _TRAINING_STATE["ended_at"] = datetime.now(timezone.utc).isoformat()
+        _TRAINING_PROCESS = None
+
+
+def _get_gpu_telemetry() -> dict[str, object]:
+    try:
+        import torch
+    except ImportError:
+        return {
+            "gpu_available": False,
+            "name": None,
+            "total_vram_gb": None,
+            "free_vram_gb": None,
+            "allocated_vram_gb": None,
+            "reserved_vram_gb": None,
+            "recommended_max_vram_gb": None,
+        }
+
+    if not torch.cuda.is_available():
+        return {
+            "gpu_available": False,
+            "name": None,
+            "total_vram_gb": None,
+            "free_vram_gb": None,
+            "allocated_vram_gb": None,
+            "reserved_vram_gb": None,
+            "recommended_max_vram_gb": None,
+        }
+
+    props = torch.cuda.get_device_properties(0)
+    total_gb = props.total_memory / (1024**3)
+    allocated_gb = torch.cuda.memory_allocated(0) / (1024**3)
+    reserved_gb = torch.cuda.memory_reserved(0) / (1024**3)
+    try:
+        free_bytes, total_bytes = torch.cuda.mem_get_info(0)
+        free_gb = free_bytes / (1024**3)
+        total_gb = total_bytes / (1024**3)
+    except Exception:
+        free_gb = None
+
+    recommended = round(max(1.0, total_gb * 0.85), 2)
+    return {
+        "gpu_available": True,
+        "name": props.name,
+        "total_vram_gb": round(total_gb, 2),
+        "free_vram_gb": round(free_gb, 2) if free_gb is not None else None,
+        "allocated_vram_gb": round(allocated_gb, 2),
+        "reserved_vram_gb": round(reserved_gb, 2),
+        "recommended_max_vram_gb": recommended,
+    }
+
+
+def _ai_root() -> Path:
+    return Path(__file__).resolve().parents[1]
 
 
 def _slug(text: str) -> str:

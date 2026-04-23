@@ -6,6 +6,9 @@ import {
   Loader2,
   Copy,
   Check,
+  Cpu,
+  Play,
+  Square,
   Image as ImageIcon,
 } from "lucide-react";
 
@@ -38,6 +41,30 @@ interface AssetBundle {
   };
 }
 
+interface GpuTelemetry {
+  gpu_available: boolean;
+  name: string | null;
+  total_vram_gb: number | null;
+  free_vram_gb: number | null;
+  allocated_vram_gb: number | null;
+  reserved_vram_gb: number | null;
+  recommended_max_vram_gb: number | null;
+}
+
+interface TrainingStatus {
+  running: boolean;
+  mode: string | null;
+  pid: number | null;
+  started_at: string | null;
+  ended_at: string | null;
+  exit_code: number | null;
+  command: string | null;
+  log_path: string | null;
+  log_tail: string[];
+}
+
+type TrainMode = "workspace" | "texture";
+
 export function AIStudioPage() {
   const [prompt, setPrompt] = useState("");
   const [texturePrompt, setTexturePrompt] = useState("");
@@ -51,6 +78,22 @@ export function AIStudioPage() {
   const [loadingOptions, setLoadingOptions] = useState(false);
   const [applyingConfig, setApplyingConfig] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [loadingHardware, setLoadingHardware] = useState(false);
+  const [startingTraining, setStartingTraining] = useState(false);
+  const [stoppingTraining, setStoppingTraining] = useState(false);
+
+  const [gpu, setGpu] = useState<GpuTelemetry | null>(null);
+  const [trainingStatus, setTrainingStatus] = useState<TrainingStatus | null>(null);
+
+  const [trainMode, setTrainMode] = useState<TrainMode>("workspace");
+  const [trainConfig, setTrainConfig] = useState<"toy" | "full">("full");
+  const [trainSize, setTrainSize] = useState<16 | 32>(16);
+  const [trainEpochs, setTrainEpochs] = useState(40);
+  const [trainMaxVramGb, setTrainMaxVramGb] = useState<string>("");
+  const [trainAutoGpu, setTrainAutoGpu] = useState(true);
+  const [trainTextureEnabled, setTrainTextureEnabled] = useState(true);
+  const [trainWorkspacesDir, setTrainWorkspacesDir] = useState("");
+  const [trainDatasetDir, setTrainDatasetDir] = useState("");
 
   const [bundle, setBundle] = useState<AssetBundle | null>(null);
   const [error, setError] = useState("");
@@ -63,7 +106,22 @@ export function AIStudioPage() {
 
   useEffect(() => {
     void loadOptions();
+    void loadHardware();
+    void loadTrainingStatus();
+
+    const timer = window.setInterval(() => {
+      void loadTrainingStatus();
+      void loadHardware();
+    }, 2500);
+
+    return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (gpu?.recommended_max_vram_gb && !trainMaxVramGb) {
+      setTrainMaxVramGb(String(gpu.recommended_max_vram_gb));
+    }
+  }, [gpu, trainMaxVramGb]);
 
   async function loadOptions() {
     setLoadingOptions(true);
@@ -79,6 +137,31 @@ export function AIStudioPage() {
       setError(err instanceof Error ? err.message : "AI server is not reachable");
     } finally {
       setLoadingOptions(false);
+    }
+  }
+
+  async function loadHardware() {
+    setLoadingHardware(true);
+    try {
+      const res = await fetch(`${AI_BACKEND}/api/training/hardware`);
+      if (!res.ok) throw new Error("Failed to query GPU hardware");
+      const data: GpuTelemetry = await res.json();
+      setGpu(data);
+    } catch {
+      setGpu(null);
+    } finally {
+      setLoadingHardware(false);
+    }
+  }
+
+  async function loadTrainingStatus() {
+    try {
+      const res = await fetch(`${AI_BACKEND}/api/training/status`);
+      if (!res.ok) throw new Error("Failed to query training status");
+      const data: TrainingStatus = await res.json();
+      setTrainingStatus(data);
+    } catch {
+      setTrainingStatus(null);
     }
   }
 
@@ -102,6 +185,57 @@ export function AIStudioPage() {
       setError(err instanceof Error ? err.message : "Failed to apply configuration");
     } finally {
       setApplyingConfig(false);
+    }
+  }
+
+  async function startTraining() {
+    setStartingTraining(true);
+    setError("");
+
+    const parsedMaxVram = Number(trainMaxVramGb);
+    const payload = {
+      mode: trainMode,
+      config: trainConfig,
+      size: trainSize,
+      epochs: trainEpochs > 0 ? trainEpochs : undefined,
+      max_vram_gb: Number.isFinite(parsedMaxVram) && parsedMaxVram > 0 ? parsedMaxVram : undefined,
+      auto_gpu: trainAutoGpu,
+      train_texture: trainTextureEnabled,
+      workspaces_dir: trainWorkspacesDir.trim() || undefined,
+      dataset_dir: trainDatasetDir.trim() || undefined,
+    };
+
+    try {
+      const res = await fetch(`${AI_BACKEND}/api/training/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error((data as { detail?: string }).detail || "Failed to start training");
+      }
+      await loadTrainingStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start training");
+    } finally {
+      setStartingTraining(false);
+    }
+  }
+
+  async function stopTraining() {
+    setStoppingTraining(true);
+    setError("");
+    try {
+      const res = await fetch(`${AI_BACKEND}/api/training/stop`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error("Failed to stop training");
+      await loadTrainingStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to stop training");
+    } finally {
+      setStoppingTraining(false);
     }
   }
 
@@ -205,6 +339,201 @@ export function AIStudioPage() {
             {applyingConfig ? <Loader2 className="h-4 w-4 animate-spin" /> : <SlidersHorizontal className="h-4 w-4" />}
             Apply Active Models
           </button>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold text-slate-100">Training Control Center</h2>
+            <p className="mt-1 text-sm text-slate-400">
+              Start/stop training jobs, view GPU VRAM telemetry, and monitor live logs.
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              void loadHardware();
+              void loadTrainingStatus();
+            }}
+            className="inline-flex items-center gap-2 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Refresh Status
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-3">
+          <Card title="GPU & VRAM">
+            {loadingHardware ? (
+              <div className="flex items-center gap-2 text-sm text-slate-400">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Reading hardware...
+              </div>
+            ) : !gpu?.gpu_available ? (
+              <p className="text-sm text-slate-400">CUDA GPU not detected. Training will run on CPU.</p>
+            ) : (
+              <div className="space-y-1 text-sm text-slate-300">
+                <p className="flex items-center gap-2 text-slate-100">
+                  <Cpu className="h-4 w-4 text-forge-300" />
+                  {gpu.name}
+                </p>
+                <p>Total VRAM: {gpu.total_vram_gb ?? "?"} GB</p>
+                <p>Free VRAM: {gpu.free_vram_gb ?? "?"} GB</p>
+                <p>Allocated: {gpu.allocated_vram_gb ?? "?"} GB</p>
+                <p>Reserved: {gpu.reserved_vram_gb ?? "?"} GB</p>
+                <p className="text-emerald-300">
+                  Suggested cap: {gpu.recommended_max_vram_gb ?? "?"} GB
+                </p>
+              </div>
+            )}
+          </Card>
+
+          <Card title="Training Setup">
+            <div className="space-y-3 text-sm">
+              <div>
+                <label className="mb-1 block text-slate-300">Mode</label>
+                <div className="flex gap-2">
+                  {(["workspace", "texture"] as const).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setTrainMode(m)}
+                      className={`rounded-md px-3 py-1.5 capitalize ${
+                        trainMode === m
+                          ? "bg-forge-600 text-white"
+                          : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                      }`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block text-slate-300">Config</label>
+                  <select
+                    value={trainConfig}
+                    onChange={(e) => setTrainConfig(e.target.value as "toy" | "full")}
+                    className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-slate-200"
+                  >
+                    <option value="toy">toy</option>
+                    <option value="full">full</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-slate-300">Size</label>
+                  <select
+                    value={trainSize}
+                    onChange={(e) => setTrainSize(Number(e.target.value) as 16 | 32)}
+                    className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-slate-200"
+                  >
+                    <option value={16}>16x16</option>
+                    <option value={32}>32x32</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block text-slate-300">Epochs</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={trainEpochs}
+                    onChange={(e) => setTrainEpochs(Number(e.target.value) || 1)}
+                    className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-slate-300">Max VRAM (GB)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    step="0.1"
+                    value={trainMaxVramGb}
+                    onChange={(e) => setTrainMaxVramGb(e.target.value)}
+                    className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-slate-200"
+                  />
+                </div>
+              </div>
+
+              {trainMode === "workspace" ? (
+                <div>
+                  <label className="mb-1 block text-slate-300">Workspaces Dir (optional)</label>
+                  <input
+                    value={trainWorkspacesDir}
+                    onChange={(e) => setTrainWorkspacesDir(e.target.value)}
+                    placeholder="/path/to/workspaces"
+                    className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-slate-200"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="mb-1 block text-slate-300">Dataset Dir (optional)</label>
+                  <input
+                    value={trainDatasetDir}
+                    onChange={(e) => setTrainDatasetDir(e.target.value)}
+                    placeholder="/path/to/textures"
+                    className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-slate-200"
+                  />
+                </div>
+              )}
+
+              <label className="flex items-center gap-2 text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={trainAutoGpu}
+                  onChange={(e) => setTrainAutoGpu(e.target.checked)}
+                />
+                Auto GPU tuning
+              </label>
+
+              {trainMode === "workspace" && (
+                <label className="flex items-center gap-2 text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={trainTextureEnabled}
+                    onChange={(e) => setTrainTextureEnabled(e.target.checked)}
+                  />
+                  Train texture model after dataset prep
+                </label>
+              )}
+            </div>
+          </Card>
+
+          <Card title="Run & Logs">
+            <div className="space-y-3 text-sm text-slate-300">
+              <p>
+                Status: {trainingStatus?.running ? <span className="text-emerald-300">Running</span> : "Idle"}
+              </p>
+              <p>PID: {trainingStatus?.pid ?? "-"}</p>
+              <p>Exit code: {trainingStatus?.exit_code ?? "-"}</p>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={startTraining}
+                  disabled={startingTraining || !!trainingStatus?.running}
+                  className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-white hover:bg-emerald-500 disabled:opacity-60"
+                >
+                  {startingTraining ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                  Start
+                </button>
+                <button
+                  onClick={stopTraining}
+                  disabled={stoppingTraining || !trainingStatus?.running}
+                  className="inline-flex items-center gap-1 rounded-md bg-rose-700 px-3 py-1.5 text-white hover:bg-rose-600 disabled:opacity-60"
+                >
+                  {stoppingTraining ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
+                  Stop
+                </button>
+              </div>
+
+              <pre className="max-h-52 overflow-auto rounded-md border border-slate-700 bg-slate-950 p-2 text-xs text-slate-300">
+                {(trainingStatus?.log_tail ?? []).join("\n") || "Training logs will appear here."}
+              </pre>
+            </div>
+          </Card>
         </div>
       </section>
 
