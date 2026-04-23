@@ -42,6 +42,34 @@ function Ensure-VenvPython($modulePath) {
     return $venvPython
 }
 
+function Install-AiDependencies($pythonExe) {
+    # Try the normal editable install first, then progressively safer fallbacks.
+    $attempts = @(
+        @{ Name = "editable dev"; Args = @("-e", ".[dev]", "--quiet") },
+        @{ Name = "editable dev no cache"; Args = @("--no-cache-dir", "-e", ".[dev]") },
+        @{ Name = "staged deps no cache"; Args = @("--no-cache-dir", "torch", "torchvision", "diffusers", "transformers", "accelerate", "safetensors", "Pillow", "fastapi", "uvicorn[standard]", "pydantic", "outlines", "pytest", "ruff") }
+    )
+
+    foreach ($attempt in $attempts) {
+        Write-Host "  AI dependency attempt: $($attempt.Name)" -ForegroundColor DarkCyan
+        & $pythonExe -m pip install @($attempt.Args)
+        if ($LASTEXITCODE -eq 0) {
+            if ($attempt.Name -eq "staged deps no cache") {
+                & $pythonExe -m pip install --no-cache-dir -e . --no-deps
+                if ($LASTEXITCODE -ne 0) {
+                    continue
+                }
+            }
+
+            return $true
+        }
+
+        Write-Host "    attempt failed (pip exit code $LASTEXITCODE)" -ForegroundColor Yellow
+    }
+
+    return $false
+}
+
 if (-not (Test-Command "git")) {
     Write-Host "[ERROR] git is required for update." -ForegroundColor Red
     exit 1
@@ -53,6 +81,19 @@ if (-not (Test-Command "python")) {
 if (-not (Test-Command "npm")) {
     Write-Host "[ERROR] npm is required for update." -ForegroundColor Red
     exit 1
+}
+
+$pythonVersionRaw = (& python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+if ($LASTEXITCODE -eq 0) {
+    $parts = $pythonVersionRaw.Trim().Split('.')
+    if ($parts.Length -ge 2) {
+        $pyMajor = [int]$parts[0]
+        $pyMinor = [int]$parts[1]
+        if ($pyMajor -ne 3 -or $pyMinor -lt 10 -or $pyMinor -gt 12) {
+            Write-Host "[ERROR] Python 3.10, 3.11, or 3.12 is required for stable AI dependency installs (detected $pythonVersionRaw)." -ForegroundColor Red
+            exit 1
+        }
+    }
 }
 
 $repoOk = Test-Path (Join-Path $Root ".git")
@@ -89,10 +130,9 @@ Write-Host "[4/5] Updating AI dependencies..." -ForegroundColor Cyan
 $aiPath = Join-Path $Root "ai"
 $aiPython = Ensure-VenvPython $aiPath
 Push-Location $aiPath
-& $aiPython -m pip install -e ".[dev]" --quiet
-if ($LASTEXITCODE -ne 0) {
+if (-not (Install-AiDependencies $aiPython)) {
     Pop-Location
-    throw "Failed to update AI dependencies (pip exit code $LASTEXITCODE)."
+    throw "Failed to update AI dependencies after multiple attempts. Try Python 3.11 and re-run update."
 }
 
 # If NVIDIA GPU is available, replace CPU torch wheel with CUDA-enabled wheel.

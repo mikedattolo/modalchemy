@@ -41,11 +41,51 @@ function Ensure-VenvPython($modulePath) {
     return $venvPython
 }
 
+function Install-AiDependencies($pythonExe) {
+    # Try the normal editable install first, then progressively safer fallbacks.
+    $attempts = @(
+        @{ Name = "editable dev"; Args = @("-e", ".[dev]", "--quiet") },
+        @{ Name = "editable dev no cache"; Args = @("--no-cache-dir", "-e", ".[dev]") },
+        @{ Name = "staged deps no cache"; Args = @("--no-cache-dir", "torch", "torchvision", "diffusers", "transformers", "accelerate", "safetensors", "Pillow", "fastapi", "uvicorn[standard]", "pydantic", "outlines", "pytest", "ruff") }
+    )
+
+    foreach ($attempt in $attempts) {
+        Write-Host "  AI dependency attempt: $($attempt.Name)" -ForegroundColor DarkCyan
+        & $pythonExe -m pip install @($attempt.Args)
+        if ($LASTEXITCODE -eq 0) {
+            if ($attempt.Name -eq "staged deps no cache") {
+                & $pythonExe -m pip install --no-cache-dir -e . --no-deps
+                if ($LASTEXITCODE -ne 0) {
+                    continue
+                }
+            }
+
+            return $true
+        }
+
+        Write-Host "    attempt failed (pip exit code $LASTEXITCODE)" -ForegroundColor Yellow
+    }
+
+    return $false
+}
+
 $missing = @()
 if (-not (Test-Command "node"))   { $missing += "Node.js 20 LTS (https://nodejs.org)" }
 if (-not (Test-Command "python")) { $missing += "Python 3.10+ (https://python.org)" }
 if (-not (Test-Command "java"))   { $missing += "Java 8+ (https://adoptium.net)" }
 if (-not (Test-Command "cargo"))  { $missing += "Rust (https://rustup.rs)" }
+
+$pythonVersionRaw = (& python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+if ($LASTEXITCODE -eq 0) {
+    $parts = $pythonVersionRaw.Trim().Split('.')
+    if ($parts.Length -ge 2) {
+        $pyMajor = [int]$parts[0]
+        $pyMinor = [int]$parts[1]
+        if ($pyMajor -ne 3 -or $pyMinor -lt 10 -or $pyMinor -gt 12) {
+            $missing += "Python 3.10, 3.11, or 3.12 is required for stable AI dependency installs (detected $pythonVersionRaw)."
+        }
+    }
+}
 
 # Check for Visual Studio Build Tools (required for Tauri / Rust on Windows)
 $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -110,10 +150,9 @@ Write-Host "[5/5] Installing AI dependencies..." -ForegroundColor Cyan
 $aiPath = Join-Path $PSScriptRoot "..\ai"
 $aiPython = Ensure-VenvPython $aiPath
 Push-Location $aiPath
-& $aiPython -m pip install -e ".[dev]" --quiet
-if ($LASTEXITCODE -ne 0) {
+if (-not (Install-AiDependencies $aiPython)) {
     Pop-Location
-    throw "Failed to install AI dependencies (pip exit code $LASTEXITCODE)."
+    throw "Failed to install AI dependencies after multiple attempts. Try Python 3.11 and re-run setup."
 }
 
 # If NVIDIA GPU is available, replace CPU torch wheel with CUDA-enabled wheel.
