@@ -19,6 +19,7 @@ dependencies = [
     "safetensors>=0.4.0",
     "Pillow>=10.4.0",
     "fastapi>=0.111.0",
+    "python-multipart>=0.0.9",
     "uvicorn[standard]>=0.30.0",
     "pydantic>=2.8.0",
     "outlines>=0.0.46",

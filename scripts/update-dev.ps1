@@ -47,7 +47,7 @@ function Install-AiDependencies($pythonExe) {
     $attempts = @(
         @{ Name = "editable dev"; Args = @("-e", ".[dev]", "--quiet") },
         @{ Name = "editable dev no cache"; Args = @("--no-cache-dir", "-e", ".[dev]") },
-        @{ Name = "staged deps no cache"; Args = @("--no-cache-dir", "torch", "torchvision", "diffusers", "transformers", "accelerate", "safetensors", "Pillow", "fastapi", "uvicorn[standard]", "pydantic", "outlines", "pytest", "ruff") }
+        @{ Name = "staged deps no cache"; Args = @("--no-cache-dir", "torch", "torchvision", "diffusers", "transformers", "accelerate", "safetensors", "Pillow", "fastapi", "python-multipart", "uvicorn[standard]", "pydantic", "outlines", "pytest", "ruff") }
     )
 
     foreach ($attempt in $attempts) {
