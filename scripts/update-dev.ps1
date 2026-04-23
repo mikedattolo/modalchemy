@@ -20,7 +20,17 @@ function Ensure-VenvPython($modulePath) {
         Write-Host "  Creating virtual environment in $venvDir" -ForegroundColor Cyan
         python -m venv $venvDir
         if ($LASTEXITCODE -ne 0) {
-            throw "Failed to create virtual environment at $venvDir"
+            Write-Host "  Built-in venv creation failed; trying virtualenv fallback..." -ForegroundColor Yellow
+
+            python -m pip install --user --upgrade virtualenv --quiet
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to install virtualenv fallback for $venvDir"
+            }
+
+            python -m virtualenv $venvDir
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to create virtual environment at $venvDir (venv and virtualenv both failed)."
+            }
         }
     }
 

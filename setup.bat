@@ -1,5 +1,5 @@
 @echo off
-:: ModForge — One-click setup
+:: ModForge - One-click setup
 :: Downloads dependencies, installs everything, and prepares the project.
 :: Double-click this file or run it from any terminal.
 
@@ -12,7 +12,7 @@ echo   ModForge Setup
 echo ============================================
 echo.
 
-:: ── Verify we're in the right directory ─────────────────────
+:: -- Verify we're in the right directory --
 if not exist "app\package.json" (
     echo [ERROR] Cannot find app\package.json.
     echo         Make sure this file is in the root of the modalchemy repo.
@@ -21,7 +21,7 @@ if not exist "app\package.json" (
     exit /b 1
 )
 
-:: ── Bypass PowerShell execution policy and run setup ────────
+:: -- Bypass PowerShell execution policy and run setup --
 echo Running setup script...
 echo.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\setup-dev.ps1"
@@ -29,7 +29,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\setup-dev.
 if %ERRORLEVEL% NEQ 0 (
     echo.
     echo ============================================
-    echo   Setup failed — see messages above
+    echo   Setup failed - see messages above
     echo ============================================
     echo.
     echo Common fixes:

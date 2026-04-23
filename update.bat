@@ -1,5 +1,5 @@
 @echo off
-:: ModForge — One-click updater
+:: ModForge - One-click updater
 :: Pulls latest changes and refreshes dependencies/tools.
 
 title ModForge Update
@@ -26,7 +26,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\update-dev
 if %ERRORLEVEL% NEQ 0 (
     echo.
     echo ============================================
-    echo   Update failed — see messages above
+    echo   Update failed - see messages above
     echo ============================================
     echo.
     pause
