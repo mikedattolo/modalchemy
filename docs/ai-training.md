@@ -78,6 +78,21 @@ python -m training.train_texture \
 
 Checkpoints are saved to `ai/checkpoints/texture_gen/`.
 
+### Fastest Path (Recommended)
+
+If you already decompiled mods into `workspaces/`, this one command prepares
+datasets and (optionally) trains a starter checkpoint:
+
+```bash
+cd ai
+
+# dataset + model corpus only (fastest)
+python -m training.bootstrap
+
+# dataset + corpus + starter texture model
+python -m training.bootstrap --train-texture --config toy --epochs 10
+```
+
 ### Training Configuration
 
 | Parameter | Toy | Full |
@@ -98,12 +113,12 @@ Checkpoints are saved to `ai/checkpoints/texture_gen/`.
 The model JSON generator uses structured generation to produce valid Minecraft
 block/item model JSON files.
 
-**Current implementation:** Template-based fallback that selects a parent model
-(`cube_all`, `cube_column`, `stairs`, etc.) based on prompt keywords.
+**Current implementation:** Retrieval + schema-validated synthesis that maps
+prompt intent into a 1.7.10-compatible structure (`cube_all`, `cube_column`,
+`stairs`, multi-element meshes, etc.) and validates the final JSON via Pydantic.
 
-**Planned implementation:** [Outlines](https://github.com/outlines-dev/outlines)
-with a small language model (e.g., TinyLlama) fine-tuned on Minecraft model
-JSON files. Outlines guarantees the output conforms to a Pydantic schema.
+**Optional future path:** Add an Outlines-constrained LLM for more expressive
+model creativity after you have a large enough curated corpus.
 
 ### Dataset Preparation
 
@@ -118,13 +133,15 @@ python -m datasets.prepare_models \
 This produces `datasets/processed/models/models.jsonl` — one JSON object per
 line with `prompt` and `completion` fields.
 
-### Training (planned)
+### Training status
 
-The model JSON generator training is not yet implemented. The planned approach:
+Model generation currently uses a retrieval + schema-validated synthesis
+approach backed by your curated model corpus (`checkpoints/model_gen/models.jsonl`).
+This means you can improve output quality immediately by adding more 1.7.10
+model JSON examples from your own mod workspaces.
 
-1. Fine-tune a small LLM (TinyLlama-1.1B or similar) on the JSONL data
-2. Use Outlines for constrained generation at inference time
-3. The schema constraint ensures 100% valid output
+Future LLM fine-tuning is still possible, but **not required** to get useful
+results from day one.
 
 ---
 
@@ -141,6 +158,9 @@ The server provides:
 - `POST /api/textures/generate` — generate a texture from a prompt
 - `POST /api/textures/remix` — remix an existing texture
 - `POST /api/models/generate` — generate a model JSON
+- `POST /api/assets/generate` — generate matching texture + model bundle
+- `POST /api/assets/generate-and-save` — generate and write files to the exact
+  `assets/<namespace>/...` structure used by mods
 - `GET /health` — check server status and GPU availability
 - `GET /docs` — OpenAPI documentation
 
