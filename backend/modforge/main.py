@@ -5,8 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from modforge.api.decompile import router as decompile_router
 from modforge.api.library import router as library_router
-from modforge.api.workspace import router as workspace_router
 from modforge.api.settings import router as settings_router
+from modforge.api.workspace import router as workspace_router
 
 app = FastAPI(
     title="ModForge Backend",

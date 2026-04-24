@@ -210,7 +210,7 @@ def _load_custom_corpus() -> list[dict]:
         return cached_entries
 
     entries: list[dict] = []
-    with open(corpus_path, "r", encoding="utf-8") as f:
+    with open(corpus_path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:

@@ -12,6 +12,8 @@ import argparse
 from dataclasses import replace
 from pathlib import Path
 
+from datasets.prepare_models import prepare as prepare_models
+from datasets.prepare_textures import prepare as prepare_textures
 from texture_gen.config import FULL_CONFIG, TOY_CONFIG
 from training.train_from_workspaces import (
     AI_ROOT,
@@ -19,16 +21,14 @@ from training.train_from_workspaces import (
     build_model_corpus,
     collect_workspace_assets,
 )
-from training.train_texture import train as train_texture
-from datasets.prepare_models import prepare as prepare_models
-from datasets.prepare_textures import prepare as prepare_textures
+from training.train_texture import train as train_texture_model
 
 
 def bootstrap(
     workspaces_dir: Path,
     *,
     size: int,
-    train_texture: bool,
+    train_texture_enabled: bool,
     config_name: str,
     epochs: int | None,
     max_vram_gb: float | None,
@@ -51,7 +51,7 @@ def bootstrap(
     corpus_size = build_model_corpus(prepared_models_jsonl, corpus_output)
 
     checkpoint_path: str | None = None
-    if train_texture:
+    if train_texture_enabled:
         config = replace(TOY_CONFIG if config_name == "toy" else FULL_CONFIG)
         config.dataset_dir = str(processed_textures)
         config.img_size = size
@@ -59,7 +59,7 @@ def bootstrap(
         if epochs is not None and epochs > 0:
             config.num_epochs = epochs
 
-        train_texture(config, max_vram_gb=max_vram_gb, auto_gpu=auto_gpu)
+        train_texture_model(config, max_vram_gb=max_vram_gb, auto_gpu=auto_gpu)
         ckpts = sorted((AI_ROOT / "checkpoints" / "texture_gen").glob("*.pt"), key=lambda p: p.stat().st_mtime)
         if ckpts:
             checkpoint_path = str(ckpts[-1])
@@ -102,7 +102,7 @@ def main() -> None:
     result = bootstrap(
         args.workspaces_dir,
         size=args.size,
-        train_texture=args.train_texture,
+        train_texture_enabled=args.train_texture,
         config_name=args.config,
         epochs=args.epochs,
         max_vram_gb=args.max_vram_gb,

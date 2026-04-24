@@ -522,6 +522,7 @@ def _generate_texture_with_runtime(size: int, prompt: str) -> Image.Image:
     train_size = runtime["train_size"]
 
     import hashlib
+
     import torch
 
     seed = int(hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:8], 16)

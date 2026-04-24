@@ -10,9 +10,7 @@ Steps:
 
 from __future__ import annotations
 
-import json
 import logging
-import shutil
 import subprocess
 import uuid
 import zipfile
@@ -21,7 +19,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from modforge.decompiler.validator import validate_jar, JarInfo
+from modforge.decompiler.validator import validate_jar
 
 logger = logging.getLogger(__name__)
 
