@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import base64
 import io
+import json
 import os
 import subprocess
 import sys
@@ -131,6 +132,12 @@ class AssetRequest(BaseModel):
     model_type: str = "block"
 
 
+class AssetSaveRequest(AssetRequest):
+    output_dir: str
+    namespace: str = "modid"
+    asset_name: str | None = None
+
+
 class RuntimeConfigRequest(BaseModel):
     texture_checkpoint: str | None = None
     model_dataset: str | None = None
@@ -186,6 +193,52 @@ async def generate_asset_bundle(req: AssetRequest):
             "texture_name": texture_name,
         },
         "model": model,
+    }
+
+
+@app.post("/api/assets/generate-and-save")
+async def generate_and_save_asset_bundle(req: AssetSaveRequest):
+    """Generate a texture + model pair and persist them in MC 1.7.10 folder layout."""
+    generated = await generate_asset_bundle(req)
+
+    output_root = Path(req.output_dir).expanduser().resolve()
+    output_root.mkdir(parents=True, exist_ok=True)
+
+    model_type = str(req.model_type or "block")
+    texture_name = req.asset_name or generated["texture"]["texture_name"]
+    texture_name = _slug(texture_name)
+    namespace = _slug(req.namespace) or "modid"
+
+    texture_bytes = base64.b64decode(generated["texture"]["image_base64"])
+    texture_subdir = "items" if model_type == "item" else "blocks"
+    model_subdir = "item" if model_type == "item" else "block"
+
+    tex_path = output_root / "assets" / namespace / "textures" / texture_subdir / f"{texture_name}.png"
+    model_path = output_root / "assets" / namespace / "models" / model_subdir / f"{texture_name}.json"
+
+    tex_path.parent.mkdir(parents=True, exist_ok=True)
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+
+    tex_path.write_bytes(texture_bytes)
+    model_path.write_text(generated["model"]["model_json"], encoding="utf-8")
+
+    blockstate_path: Path | None = None
+    if model_type == "block":
+        blockstate_path = output_root / "assets" / namespace / "blockstates" / f"{texture_name}.json"
+        blockstate_path.parent.mkdir(parents=True, exist_ok=True)
+        blockstate = {"variants": {"normal": {"model": f"{namespace}:{texture_name}"}}}
+        blockstate_path.write_text(json.dumps(blockstate, indent=2), encoding="utf-8")
+
+    return {
+        "ok": True,
+        "asset_name": texture_name,
+        "namespace": namespace,
+        "paths": {
+            "texture": str(tex_path),
+            "model": str(model_path),
+            "blockstate": str(blockstate_path) if blockstate_path else None,
+        },
+        "generated": generated,
     }
 
 
@@ -368,25 +421,94 @@ async def health():
 # ── Helpers ──────────────────────────────────────────────────────
 
 def _placeholder_texture(size: int, prompt: str) -> Image.Image:
-    """Generate a simple placeholder texture based on prompt keywords."""
+    """Generate deterministic Minecraft-like pixel art when no checkpoint exists."""
     import hashlib
+    import random
 
-    h = hashlib.md5(prompt.encode()).hexdigest()  # noqa: S324 -- not for security
-    r, g, b = int(h[:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+    seed = int(digest[:16], 16)
+    rng = random.Random(seed)
 
-    img = Image.new("RGB", (size, size))
-    pixels = img.load()
-    assert pixels is not None
+    palette = _infer_palette(prompt, digest)
+    img = Image.new("RGB", (size, size), palette["mid"])
+    px = img.load()
+    assert px is not None
+
+    pattern = _infer_pattern(prompt)
     for y in range(size):
         for x in range(size):
-            # Create a noisy pixel-art-ish pattern
-            noise = ((x * 7 + y * 13 + int(h[6:8], 16)) % 40) - 20
-            pixels[x, y] = (
-                max(0, min(255, r + noise)),
-                max(0, min(255, g + noise + (x % 3) * 5)),
-                max(0, min(255, b + noise - (y % 3) * 5)),
-            )
+            base = _sample_pattern_color(pattern, x, y, size, palette, rng)
+            shade = ((x * 5 + y * 3 + seed) % 9) - 4
+            px[x, y] = _shade_color(base, shade)
+
+    # subtle edge framing to make generated UV seams read better in game
+    edge_color = _shade_color(palette["dark"], -6)
+    for i in range(size):
+        px[0, i] = edge_color
+        px[i, 0] = edge_color
+        if i % 2 == 0:
+            px[size - 1, i] = _shade_color(edge_color, 2)
+            px[i, size - 1] = _shade_color(edge_color, 2)
+
     return img
+
+
+def _infer_pattern(prompt: str) -> str:
+    lower = prompt.lower()
+    if any(key in lower for key in ["ore", "stone", "cobble", "rock", "brick"]):
+        return "mineral"
+    if any(key in lower for key in ["wood", "log", "oak", "spruce", "birch"]):
+        return "grain"
+    if any(key in lower for key in ["metal", "iron", "steel", "copper", "gold"]):
+        return "plate"
+    if any(key in lower for key in ["leaf", "grass", "moss", "plant"]):
+        return "foliage"
+    return "noise"
+
+
+def _infer_palette(prompt: str, digest: str) -> dict[str, tuple[int, int, int]]:
+    lower = prompt.lower()
+    if "redstone" in lower:
+        return {"light": (224, 72, 67), "mid": (186, 41, 40), "dark": (108, 18, 22)}
+    if any(key in lower for key in ["emerald", "leaf", "grass", "moss"]):
+        return {"light": (109, 201, 89), "mid": (66, 150, 61), "dark": (35, 94, 38)}
+    if any(key in lower for key in ["diamond", "ice", "water", "crystal"]):
+        return {"light": (150, 224, 227), "mid": (81, 173, 189), "dark": (42, 109, 125)}
+    if any(key in lower for key in ["wood", "oak", "spruce", "plank"]):
+        return {"light": (168, 132, 84), "mid": (132, 95, 58), "dark": (89, 61, 34)}
+
+    r, g, b = int(digest[:2], 16), int(digest[2:4], 16), int(digest[4:6], 16)
+    mid = (r, g, b)
+    return {
+        "light": _shade_color(mid, 30),
+        "mid": mid,
+        "dark": _shade_color(mid, -36),
+    }
+
+
+def _sample_pattern_color(
+    pattern: str,
+    x: int,
+    y: int,
+    size: int,
+    palette: dict[str, tuple[int, int, int]],
+    rng,
+) -> tuple[int, int, int]:
+    if pattern == "grain":
+        return palette["light"] if (x // max(1, size // 8)) % 2 == 0 else palette["mid"]
+    if pattern == "plate":
+        if (x + y) % max(2, size // 4) == 0:
+            return palette["light"]
+        return palette["mid"]
+    if pattern == "foliage":
+        return palette["light"] if (x + 2 * y) % 5 == 0 else palette["mid"]
+    if pattern == "mineral":
+        return palette["light"] if rng.random() > 0.75 else palette["dark"]
+    return palette["light"] if rng.random() > 0.85 else palette["mid"]
+
+
+def _shade_color(color: tuple[int, int, int], delta: int) -> tuple[int, int, int]:
+    return tuple(max(0, min(255, c + delta)) for c in color)
 
 
 def _generate_texture_with_runtime(size: int, prompt: str) -> Image.Image:
@@ -400,6 +522,7 @@ def _generate_texture_with_runtime(size: int, prompt: str) -> Image.Image:
     train_size = runtime["train_size"]
 
     import hashlib
+
     import torch
 
     seed = int(hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:8], 16)

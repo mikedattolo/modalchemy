@@ -27,7 +27,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
-from texture_gen.config import TOY_CONFIG, FULL_CONFIG, TextureGenConfig
+from texture_gen.config import FULL_CONFIG, TOY_CONFIG, TextureGenConfig
 from texture_gen.model import TinyUNet
 from texture_gen.scheduler import DDPMScheduler
 from training.texture_dataset import TextureDataset

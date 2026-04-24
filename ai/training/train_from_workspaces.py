@@ -84,7 +84,7 @@ def build_model_corpus(processed_models_jsonl: Path, output_jsonl: Path) -> int:
     output_jsonl.parent.mkdir(parents=True, exist_ok=True)
 
     kept = 0
-    with open(processed_models_jsonl, "r", encoding="utf-8") as src, open(
+    with open(processed_models_jsonl, encoding="utf-8") as src, open(
         output_jsonl, "w", encoding="utf-8"
     ) as dst:
         for line in src:

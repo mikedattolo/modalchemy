@@ -10,6 +10,7 @@ def test_generate_block_model():
     assert result["model_type"] == "block"
     assert "model_json" in result
     assert "cube_all" in result["model_json"]
+    assert result["compatibility"]["minecraft"] == "1.7.10"
 
 
 def test_generate_column_block():
@@ -36,6 +37,17 @@ def test_generate_giraffe_block_has_elements():
 def test_generate_gun_block_has_elements():
     result = generate_model("steampunk gun block", model_type="block")
     assert "elements" in result["model_json"]
+
+
+def test_generate_complex_statue_includes_extra_detail():
+    result = generate_model("ornate creature statue", model_type="block")
+    model = json.loads(result["model_json"])
+    assert len(model.get("elements", [])) >= 8
+
+
+def test_prompt_slug_is_sanitized_for_textures():
+    result = generate_model("!!!", model_type="item")
+    assert "generated_asset" in result["model_json"]
 
 
 def test_generate_from_custom_model_corpus(tmp_path, monkeypatch):

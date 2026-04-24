@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { DownloadCloud, Search, Loader2, CheckCircle2 } from "lucide-react";
 
 const BACKEND = "http://localhost:8420";
@@ -31,11 +31,7 @@ export function LibraryPage() {
   const [importingProjectId, setImportingProjectId] = useState<string | null>(null);
   const [lastImported, setLastImported] = useState<string>("");
 
-  useEffect(() => {
-    void searchCatalog();
-  }, [version]);
-
-  async function searchCatalog() {
+  const searchCatalog = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
@@ -58,7 +54,11 @@ export function LibraryPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [query, version]);
+
+  useEffect(() => {
+    void searchCatalog();
+  }, [searchCatalog]);
 
   async function importAndDecompile(item: LibraryItem) {
     setImportingProjectId(item.project_id);
